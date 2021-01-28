@@ -1,2 +1,2 @@
 # nml
-NCurses Config Library
+NCurses Menu Library
