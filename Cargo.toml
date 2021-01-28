@@ -1,5 +1,5 @@
 [package]
-name = "ncurses_menu_lib"
+name = "nml"
 version = "0.1.0"
 authors = ["protobit <admin@protobyte.tech>"]
 edition = "2018"
