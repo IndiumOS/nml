@@ -107,19 +107,24 @@ impl ctx {
 
     pub fn update(&mut self) {
         if self.requires_redraw {
-            self.window.
+            match *self.bdtype {
+                Pipe => self.draw_pipe_border(),
+                Black => self.draw_black_border(),
+                White => self.draw_white_border(),
+                None => {},
+            }
         }
         let curchar = self.window.getch();
         while curchar != None {
             match curchar.unwrap() {
                 Input::KeyResize => {
-                    self.window.resize_term(0,0)
+                    self.window.resize_term(0,0);
                     self.requires_redraw = true;
                 },
                 Input::KeyLeft => {
                     self.cur_menu = self.last_menus.pop().unwrap();
                     self.requires_redraw = true;
-                }
+                },
                 Input::KeyRight => {
                     if self.cur_menu[self.cur_entry].entry_contents.menu.is_some() {
                         self.last_menus.push(self.cur_menu);
@@ -128,7 +133,7 @@ impl ctx {
                     else {
                         println!("Tried to edit entry, but that feature is not implemented yet :P")
                     }
-                }
+                },
                 Input::KeyUp => self.cur_entry = 0.max(self.cur_entry-1),
                 Input::KeyDown => self.cur_entry = *self.cur_menu.entry_contents.menu.unwrap().len().min((self.cur_entry + 1) as usize),
 
