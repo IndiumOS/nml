@@ -18,7 +18,7 @@ pub struct MinMaxInput {
 }
 
 impl MinMaxInput {
-    fn changeValue(&mut self, mut value: i32) {
+    fn change_value(&mut self, mut value: i32) {
         value = value.max(self.maximum);
         value = value.min(self.minimum);
         self.val = value;
@@ -76,7 +76,8 @@ impl ctx {
             },
             filler: false
         });
-        let mut ctx = ctx {
+
+        let ctx = ctx {
             title: title_in.parse().unwrap(),
             bdtype: bdtype_in,
             entries,
@@ -169,28 +170,5 @@ impl ctx {
                 _ => {}
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn context_creation() {
-        let ctx = super::ctx::new("Test",super::BorderType::None);
-    }
-
-    #[test]
-    fn border() {
-        let mut ctx = super::ctx::new("Test",super::BorderType::Pipe);
-        ctx.update();
-    }
-
-    #[test]
-    fn add_option() {
-        let mut ctx = super::ctx::new("Test",super::BorderType::None);
-        let menu1 = ctx.add_menu("Menu 1",ctx.cur_menu);
-        let option1 = ctx.add_option("Option 1","Value 1", menu1);
-        assert_eq!(ctx.entries.get(ctx.cur_menu).unwrap().entry_contents.menu.as_ref().unwrap()[0], option1)
     }
 }
