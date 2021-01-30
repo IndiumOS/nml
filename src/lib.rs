@@ -92,7 +92,7 @@ impl ctx {
     }
 
     fn draw_pipe_border(&mut self) {
-        self.window.border('|','|','—','—','┌','┐','└','┘');
+        self.window.border('│','│','—','—','┌','┐','└','┘');
     }
 
     fn draw_white_border(&mut self) {
