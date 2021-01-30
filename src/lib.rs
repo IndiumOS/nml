@@ -56,11 +56,15 @@ pub struct ctx {
     cur_menu: DefaultKey,
     cur_entry: DefaultKey,
     last_menus: Vec<DefaultKey>,
-    cur_menu_entry: usize
+    cur_menu_entry: usize,
+    threadHandle: std::thread::JoinHandle<()>,
+    running: bool,
 }
 
 impl Drop for ctx {
     fn drop(&mut self) {
+        self.running = false;
+        self.threadHandle.join();
         endwin();
     }
 }
@@ -86,14 +90,16 @@ impl ctx {
             cur_menu: out,
             cur_entry: out,
             last_menus: vec![],
-            cur_menu_entry: 0
+            cur_menu_entry: 0,
+            threadHandle: std::thread::spawn(|| {}),
+            running: true
         };
         noecho();
         ctx
     }
 
     fn draw_pipe_border(&mut self) {
-        self.window.border('|','|','—','—','┌','┐','└','┘');
+        self.window.border('│','│','—','—','┌','┐','└','┘');
     }
 
     fn draw_white_border(&mut self) {
@@ -126,49 +132,58 @@ impl ctx {
         }), parent_menu)
     }
 
-    pub fn update(&mut self) {
-        if self.requires_redraw {
-            match &self.bdtype {
-                BorderType::Pipe => self.draw_pipe_border(),
-                BorderType::Black => self.draw_black_border(),
-                BorderType::White => self.draw_white_border(),
-                BorderType::None => {},
+    pub fn startUpdateThread(&mut self) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move ||
+            {
+                while self.running {
+                    if self.requires_redraw {
+                        match &self.bdtype {
+                            BorderType::Pipe => self.draw_pipe_border(),
+                            BorderType::Black => self.draw_black_border(),
+                            BorderType::White => self.draw_white_border(),
+                            BorderType::None => {},
+                        }
+                        for y in gen_range() {
+
+                        }
+                    }
+                    let mut curchar = self.window.getch();
+                    while curchar != None {
+                        match curchar.unwrap() {
+                            Input::KeyResize => {
+                                resize_term(0, 0);
+                                self.requires_redraw = true;
+                            },
+                            Input::KeyLeft => {
+                                self.cur_menu = self.last_menus.pop().unwrap();
+                                self.requires_redraw = true;
+                            },
+                            Input::KeyRight => {
+                                if self.entries[self.cur_entry].entry_contents.menu.is_some() {
+                                    self.last_menus.push(self.cur_menu);
+                                    self.cur_menu = self.cur_entry;
+                                } else {
+                                    println!("Tried to edit entry, but that feature is not implemented yet :P")
+                                }
+                            },
+                            Input::KeyUp => {
+                                if self.cur_menu_entry < self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap().len() {
+                                    self.cur_menu_entry += 1;
+                                    self.cur_entry = self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap()[self.cur_menu_entry];
+                                }
+                            },
+                            Input::KeyDown => {
+                                if self.cur_menu_entry != 0 {
+                                    self.cur_menu_entry -= 1;
+                                    self.cur_entry = self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap()[self.cur_menu_entry];
+                                }
+                            },
+                            _ => {}
+                        }
+                    }
+                    curchar = self.window.getch();
+                }
             }
-        }
-        let curchar = self.window.getch();
-        while curchar != None {
-            match curchar.unwrap() {
-                Input::KeyResize => {
-                    resize_term(0,0);
-                    self.requires_redraw = true;
-                },
-                Input::KeyLeft => {
-                    self.cur_menu = self.last_menus.pop().unwrap();
-                    self.requires_redraw = true;
-                },
-                Input::KeyRight => {
-                    if self.entries[self.cur_entry].entry_contents.menu.is_some() {
-                        self.last_menus.push(self.cur_menu);
-                        self.cur_menu = self.cur_entry;
-                    }
-                    else {
-                        println!("Tried to edit entry, but that feature is not implemented yet :P")
-                    }
-                },
-                Input::KeyUp => {
-                    if self.cur_menu_entry < self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap().len() {
-                        self.cur_menu_entry += 1;
-                        self.cur_entry = self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap()[self.cur_menu_entry];
-                    }
-                },
-                Input::KeyDown => {
-                    if self.cur_menu_entry != 0 {
-                        self.cur_menu_entry -= 1;
-                        self.cur_entry = self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap()[self.cur_menu_entry];
-                    }
-                },
-                _ => {}
-            }
-        }
+        )
     }
 }
