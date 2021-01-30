@@ -1,7 +1,7 @@
 extern crate pancurses;
-
 use pancurses::{initscr, endwin, Input, noecho, resize_term};
 use slotmap::{DefaultKey, SlotMap};
+use std::borrow::Borrow;
 
 #[derive(PartialEq, Eq)]
 pub enum BorderType {
@@ -9,20 +9,6 @@ pub enum BorderType {
     White,
     Black,
     None
-}
-
-pub struct MinMaxInput {
-    minimum: i32,
-    maximum: i32,
-    val: i32
-}
-
-impl MinMaxInput {
-    fn changeValue(&mut self, mut value: i32) {
-        value = value.max(self.maximum);
-        value = value.min(self.minimum);
-        self.val = value;
-    }
 }
 
 pub struct EntryContents {
@@ -49,14 +35,13 @@ impl Entry {
 
 pub struct ctx {
     title: String,
-    bdtype: BorderType,
     entries: SlotMap<DefaultKey, Entry>,
-    window: pancurses::Window,
+    pub window: pancurses::Window,
     requires_redraw: bool,
-    cur_menu: DefaultKey,
-    cur_entry: DefaultKey,
-    last_menus: Vec<DefaultKey>,
-    cur_menu_entry: usize
+    pub cur_menu: DefaultKey,
+    pub cur_entry: DefaultKey,
+    pub last_menus: Vec<DefaultKey>,
+    pub cur_menu_entry: usize
 }
 
 impl Drop for ctx {
@@ -66,7 +51,7 @@ impl Drop for ctx {
 }
 
 impl ctx {
-    pub fn new (title_in: &str, bdtype_in: BorderType) -> ctx {
+    pub fn new (title_in: &str) -> ctx {
         let mut entries = SlotMap::new();
         let out = entries.insert(Entry {
             name: "Root Menu".to_string(),
@@ -76,9 +61,8 @@ impl ctx {
             },
             filler: false
         });
-        let mut ctx = ctx {
+        let ctx = ctx {
             title: title_in.parse().unwrap(),
-            bdtype: bdtype_in,
             entries,
             window: initscr(),
             requires_redraw: true,
@@ -87,22 +71,9 @@ impl ctx {
             last_menus: vec![],
             cur_menu_entry: 0
         };
+        ctx.window.keypad(true);
         noecho();
         ctx
-    }
-
-    fn draw_pipe_border(&mut self) {
-        self.window.border('│','│','—','—','┌','┐','└','┘');
-    }
-
-    fn draw_white_border(&mut self) {
-        self.window.color_set(pancurses::COLOR_WHITE);
-        self.window.border('█','█','█','█','█','█','█','█');
-    }
-
-    fn draw_black_border(&mut self) {
-        self.window.color_set(pancurses::COLOR_BLACK);
-        self.window.border('█','█','█','█','█','█','█','█');
     }
 
     fn add_entry(&mut self, ent: Entry, parent_menu: DefaultKey) -> DefaultKey {
@@ -127,70 +98,55 @@ impl ctx {
 
     pub fn update(&mut self) {
         if self.requires_redraw {
-            match &self.bdtype {
-                BorderType::Pipe => self.draw_pipe_border(),
-                BorderType::Black => self.draw_black_border(),
-                BorderType::White => self.draw_white_border(),
-                BorderType::None => {},
-            }
-        }
-        let curchar = self.window.getch();
-        while curchar != None {
-            match curchar.unwrap() {
-                Input::KeyResize => {
-                    resize_term(0,0);
-                    self.requires_redraw = true;
-                },
-                Input::KeyLeft => {
-                    self.cur_menu = self.last_menus.pop().unwrap();
-                    self.requires_redraw = true;
-                },
-                Input::KeyRight => {
-                    if self.entries[self.cur_entry].entry_contents.menu.is_some() {
-                        self.last_menus.push(self.cur_menu);
-                        self.cur_menu = self.cur_entry;
+            pancurses::set_title(self.title.as_str());
+            self.window.draw_box(0,0);
+            let mut y = 5;
+            for option_index in self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap() {
+                let option = &self.entries[*option_index];
+                if !option.filler {
+                    if (y-5) == self.cur_menu_entry {
+                        self.window.mvaddstr(y as i32, 5, "[>] ".to_owned()+&self.title);
                     }
                     else {
-                        println!("Tried to edit entry, but that feature is not implemented yet :P")
+                        self.window.mvaddstr(y as i32, 5, "[ ] ".to_owned()+&self.title);
                     }
-                },
-                Input::KeyUp => {
-                    if self.cur_menu_entry < self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap().len() {
-                        self.cur_menu_entry += 1;
-                        self.cur_entry = self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap()[self.cur_menu_entry];
-                    }
-                },
-                Input::KeyDown => {
-                    if self.cur_menu_entry != 0 {
-                        self.cur_menu_entry -= 1;
-                        self.cur_entry = self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap()[self.cur_menu_entry];
-                    }
-                },
-                _ => {}
+                    y += 1;
+                }
             }
+            self.window.refresh();
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn context_creation() {
-        let ctx = super::ctx::new("Test",super::BorderType::None);
-    }
-
-    #[test]
-    fn border() {
-        let mut ctx = super::ctx::new("Test",super::BorderType::Pipe);
-        ctx.update();
-    }
-
-    #[test]
-    fn add_option() {
-        let mut ctx = super::ctx::new("Test",super::BorderType::None);
-        let menu1 = ctx.add_menu("Menu 1",ctx.cur_menu);
-        let option1 = ctx.add_option("Option 1","Value 1", menu1);
-        assert_eq!(ctx.entries.get(ctx.cur_menu).unwrap().entry_contents.menu.as_ref().unwrap()[0], option1)
+        let curchar = self.window.getch();
+        match curchar {
+            Some(Input::KeyResize) => {
+                resize_term(0,0);
+                self.requires_redraw = true;
+            },
+            Some(Input::KeyLeft) => {
+                self.cur_menu = self.last_menus.pop().unwrap();
+                self.requires_redraw = true;
+            },
+            Some(Input::KeyRight)=> {
+                if self.entries[self.cur_entry].entry_contents.menu.is_some() {
+                    self.last_menus.push(self.cur_menu);
+                    self.cur_menu = self.cur_entry;
+                }
+                else {
+                    println!("Tried to edit entry, but that feature is not implemented yet :P")
+                }
+            },
+            Some(Input::KeyDown) => {
+                if self.cur_menu_entry < self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap().len() {
+                    self.cur_menu_entry += 1;
+                    self.cur_entry = self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap()[self.cur_menu_entry];
+                }
+            },
+            Some(Input::KeyUp) => {
+                if self.cur_menu_entry != 0 {
+                    self.cur_menu_entry -= 1;
+                    self.cur_entry = self.entries[self.cur_menu].entry_contents.menu.as_ref().unwrap()[self.cur_menu_entry];
+                }
+            },
+            _ => {}
+        }
     }
 }
