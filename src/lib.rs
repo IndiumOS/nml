@@ -1,7 +1,6 @@
 extern crate pancurses;
-use pancurses::{initscr, endwin, Input, noecho, resize_term, echo, COLOR_BLUE, COLOR_WHITE};
+use pancurses::{initscr, endwin, Input, noecho, resize_term, COLOR_BLUE, COLOR_WHITE};
 use slotmap::{DefaultKey, SlotMap};
-use std::convert::TryInto;
 
 #[derive(PartialEq, Eq)]
 pub enum BorderType {
@@ -48,6 +47,8 @@ pub struct ctx {
     pub editing: bool,
     input_buffer: String,
     input_pos: usize,
+    log_msg: String,
+    log_color: i16,
 }
 
 impl Drop for ctx {
@@ -67,6 +68,7 @@ impl ctx {
             },
             filler: false
         });
+
         let ctx = ctx {
             title: title_in.parse().unwrap(),
             entries,
@@ -82,6 +84,8 @@ impl ctx {
             editing: false,
             input_buffer: "".to_string(),
             input_pos: 0,
+            log_msg: "".to_string(),
+            log_color: COLOR_WHITE,
         };
         ctx.window.keypad(true);
         noecho();
@@ -109,18 +113,13 @@ impl ctx {
         }), parent_menu)
     }
 
-    fn log(&mut self,toLog: &str, logType: i16) {
-        let prevlocation = self.window.get_cur_yx();
-        self.window.mv(self.window.get_max_y()-5,10);
-        self.window.color_set(logType);
-        self.window.printw(toLog);
-        self.window.color_set(COLOR_WHITE);
-        self.window.mv(prevlocation.0,prevlocation.1);
+    fn log(&mut self,to_log: &str, log_type: i16) {
+        self.log_msg = to_log.to_string();
+        self.log_color = log_type;
     }
 
     pub fn update(&mut self) {
         if self.requires_redraw {
-            self.window.get
             self.window.clear();
             pancurses::set_title(self.title.as_str());
             self.window.draw_box(0,0);
@@ -148,6 +147,10 @@ impl ctx {
                     y += 1;
                 }
             }
+            self.window.mv(self.window.get_max_y()-5,10);
+            self.window.color_set(self.log_color);
+            self.window.printw(self.log_msg.as_str());
+            self.window.color_set(COLOR_WHITE);
             self.window.refresh();
             self.requires_redraw = false;
         }
