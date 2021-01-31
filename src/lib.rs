@@ -1,7 +1,6 @@
 extern crate pancurses;
-use pancurses::{initscr, endwin, Input, noecho, resize_term, echo, COLOR_BLUE, COLOR_WHITE};
+use pancurses::{initscr, endwin, Input, noecho, resize_term, COLOR_BLUE, COLOR_WHITE};
 use slotmap::{DefaultKey, SlotMap};
-use std::convert::TryInto;
 
 #[derive(PartialEq, Eq)]
 pub enum BorderType {
@@ -120,7 +119,6 @@ impl ctx {
 
     pub fn update(&mut self) {
         if self.requires_redraw {
-            self.window.get
             self.window.clear();
             pancurses::set_title(self.title.as_str());
             self.window.draw_box(0,0);
