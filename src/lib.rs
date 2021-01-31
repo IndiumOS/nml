@@ -1,6 +1,7 @@
 extern crate pancurses;
-use pancurses::{initscr, endwin, Input, noecho, resize_term, echo};
+use pancurses::{initscr, endwin, Input, noecho, resize_term, echo, COLOR_BLUE, COLOR_WHITE};
 use slotmap::{DefaultKey, SlotMap};
+use std::convert::TryInto;
 
 #[derive(PartialEq, Eq)]
 pub enum BorderType {
@@ -46,6 +47,7 @@ pub struct ctx {
     pub y_options_offset: u32,
     pub editing: bool,
     input_buffer: String,
+    input_pos: usize,
 }
 
 impl Drop for ctx {
@@ -79,9 +81,11 @@ impl ctx {
             y_options_offset: y,
             editing: false,
             input_buffer: "".to_string(),
+            input_pos: 0,
         };
         ctx.window.keypad(true);
         noecho();
+        ctx.window.nodelay(true);
         ctx
     }
 
@@ -105,8 +109,18 @@ impl ctx {
         }), parent_menu)
     }
 
+    fn log(&mut self,toLog: &str, logType: i16) {
+        let prevlocation = self.window.get_cur_yx();
+        self.window.mv(self.window.get_max_y()-5,10);
+        self.window.color_set(logType);
+        self.window.printw(toLog);
+        self.window.color_set(COLOR_WHITE);
+        self.window.mv(prevlocation.0,prevlocation.1);
+    }
+
     pub fn update(&mut self) {
         if self.requires_redraw {
+            self.window.get
             self.window.clear();
             pancurses::set_title(self.title.as_str());
             self.window.draw_box(0,0);
@@ -115,7 +129,15 @@ impl ctx {
                 let option = &self.entries[*option_index];
                 if !option.filler {
                     if option.entry_contents.text.is_some() {
-                        self.window.mvaddstr(y as i32,self.window.get_max_x()-(self.x_options_offset as i32)-(option.entry_contents.text.as_ref().unwrap().len() as i32),option.entry_contents.text.as_ref().unwrap());
+                        let mut truncated_value: String;
+                        if !self.editing ||  !((y-self.y_options_offset) == self.cur_menu_entry as u32) {
+                            truncated_value = String::from(option.entry_contents.text.as_ref().unwrap().as_str());
+                        }
+                        else {
+                            truncated_value = String::from(self.input_buffer.as_str());
+                        }
+                        truncated_value.truncate(((self.window.get_max_x()-10)/2) as usize);
+                        self.window.mvaddstr(y as i32,self.window.get_max_x()-(self.x_options_offset as i32)-(option.entry_contents.text.as_ref().unwrap().len() as i32),truncated_value);
                     }
                     if (y-self.y_options_offset) == self.cur_menu_entry as u32 {
                         self.window.mvaddstr(y as i32, self.x_options_offset as i32, "[>] ".to_owned()+option.name.as_str());
@@ -148,10 +170,13 @@ impl ctx {
                         self.cur_menu = self.cur_entry;
                         self.requires_redraw = true;
                     } else {
-                        echo();
                         self.window.mvinch(self.cur_menu_entry as i32 + (self.y_options_offset as i32),
                                            self.window.get_max_x() - (self.x_options_offset as i32) -
                                                (self.entries[self.cur_entry].entry_contents.text.as_ref().unwrap().len() as i32));
+
+                        self.input_buffer = String::from(self.entries[self.cur_entry].entry_contents.text.as_ref().unwrap().as_str());
+
+                        self.editing = true;
                     }
                 },
                 Some(Input::KeyDown) => {
@@ -172,19 +197,53 @@ impl ctx {
             }
         }
         else {
+            self.window.mvinch(self.cur_menu_entry as i32 + (self.y_options_offset as i32),
+                               self.window.get_max_x() - (self.x_options_offset as i32) -
+                                   (self.entries[self.cur_entry].entry_contents.text.as_ref().unwrap().len() as i32) + self.input_pos as i32);
+
             match curchar {
-                Some(Input::KeyEnter) => {
-                    self.editing = false;
-                    self.entries[self.cur_entry].entry_contents.text.as_mut().unwrap().clear();
-                    self.entries[self.cur_entry].entry_contents.text.as_mut().unwrap().insert_str(0,self.input_buffer.as_str());
-                    self.input_buffer.clear();
+                Some(Input::Character(c)) => self.log(&c.to_string(),COLOR_BLUE),
+                _ => {}
+            }
+            match curchar {
+                Some(Input::KeyResize) => {
+                    resize_term(0, 0);
+                    self.requires_redraw = true;
                 },
-                Some(Input::KeyAbort) => {
-                    self.editing = false;
-                    self.input_buffer.clear();
+                Some(Input::KeyLeft) => {
+                    self.input_pos-=1;
+                },
+                Some(Input::KeyRight) => {
+                    self.input_pos+=1;
                 },
                 Some(Input::Character(c)) => {
-                    self.input_buffer.push(c);
+                    match c {
+                        '\n' => {
+                            self.log("Enter pressed",COLOR_BLUE);
+                            self.editing = false;
+                            self.entries[self.cur_entry].entry_contents.text.as_mut().unwrap().clear();
+                            self.entries[self.cur_entry].entry_contents.text.as_mut().unwrap().insert_str(0,self.input_buffer.as_str());
+                            self.input_buffer.clear();
+                            self.window.printw(self.entries[self.cur_entry].entry_contents.text.as_ref().unwrap());
+                        },
+                        '\x1B' => {
+                            self.log("Escape pressed",COLOR_BLUE);
+                            self.editing = false;
+                            self.input_buffer.clear();
+                        },
+                        '\x08' => {
+                            self.log("Backspace pressed",COLOR_BLUE);
+                            self.input_buffer.remove(self.input_pos);
+                        }
+                        '\x7F' => {
+                            self.log("Delete pressed",COLOR_BLUE);
+                            self.input_buffer.remove(self.input_pos);
+                        }
+                        _ => {
+                            self.input_buffer.insert(self.input_pos,c);
+                        },
+                    }
+                    self.requires_redraw = true;
                 },
                 _ => {},
             }
