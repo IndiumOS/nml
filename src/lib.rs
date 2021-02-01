@@ -1,4 +1,5 @@
 extern crate pancurses;
+
 use pancurses::{initscr, endwin, Input, noecho, resize_term, COLOR_WHITE};
 use slotmap::{DefaultKey, SlotMap};
 
