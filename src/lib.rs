@@ -41,8 +41,8 @@ pub struct ctx {
     pub editing: bool,
     input_buffer: String,
     input_pos: usize,
-    log_msg: String,
-    log_color: i16,
+    pub log_msg: String,
+    pub log_color: i16,
 }
 
 impl Drop for ctx {
@@ -114,7 +114,7 @@ impl ctx {
         }), parent_menu)
     }
 
-    fn log(&mut self) {
+    pub fn log(&mut self) {
         self.window.mv(self.window.get_max_y()-5,10);
         self.window.color_set(self.log_color);
         self.window.printw(self.log_msg.as_str());
@@ -264,13 +264,16 @@ impl ctx {
                             self.input_buffer.clear();
                         },
                         '\x08' => {
+                            self.input_pos -= 1;
                             self.input_buffer.remove(self.input_pos);
                         }
                         '\x7F' => {
-                            self.input_buffer.remove(self.input_pos);
+                            self.input_pos -= 1;
+                            self.input_buffer.remove(self.input_pos-1);
                         }
                         _ => {
                             self.input_buffer.insert(self.input_pos,c);
+                            self.input_pos+=1;
                         },
                     }
                     self.requires_redraw = true;
